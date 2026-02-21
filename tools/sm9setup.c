@@ -1,5 +1,5 @@
 /*
- *  Copyright 2014-2024 The GmSSL Project. All Rights Reserved.
+ *  Copyright 2014-2026 The GmSSL Project. All Rights Reserved.
  *
  *  Licensed under the Apache License, Version 2.0 (the License); you may
  *  not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 #include <gmssl/sm9.h>
 #include <gmssl/error.h>
 
-static const char *usage = "-alg (sm9sign|sm9encrypt) [-pass password] [-out pem] [-pubout pem]";
+static const char *usage = "-alg (sm9sign|sm9encrypt) [-pass password] [-out pem] [-pubout pem] [-verbose]";
 
 static const char *options =
 "Options\n"
@@ -25,6 +25,7 @@ static const char *options =
 "    -pass pass                  Password to encrypt the master private key\n"
 "    -out pem                    Output password-encrypted master private key in PEM format\n"
 "    -pubout pem                 Output master public key in PEM format\n"
+"    -verbose                    Print details\n"
 "\n"
 "Examples\n"
 "\n"
@@ -45,6 +46,7 @@ int sm9setup_main(int argc, char **argv)
 	FILE *puboutfp = stdout;
 	SM9_SIGN_MASTER_KEY sign_msk;
 	SM9_ENC_MASTER_KEY enc_msk;
+	int verbose = 0;
 
 	argc--;
 	argv++;
@@ -83,6 +85,8 @@ int sm9setup_main(int argc, char **argv)
 				error_print();
 				goto end;
 			}
+		} else if (!strcmp(*argv, "-verbose")) {
+			verbose = 1;
 		} else {
 bad:
 			fprintf(stderr, "gmssl %s: illegal option '%s'\n", prog, *argv);
@@ -110,6 +114,10 @@ bad:
 			error_print();
 			goto end;
 		}
+		if (verbose) {
+			sm9_sign_master_key_print(stdout, 0, 0, "sm9_sign_master_key", &sign_msk);
+			sm9_sign_master_public_key_print(stdout, 0, 0, "sm9_sign_master_public_key", &sign_msk);
+		}
 		break;
 	case OID_sm9encrypt:
 		if (sm9_enc_master_key_generate(&enc_msk) != 1
@@ -117,6 +125,10 @@ bad:
 			|| sm9_enc_master_public_key_to_pem(&enc_msk, puboutfp) != 1) {
 			error_print();
 			goto end;
+		}
+		if (verbose) {
+			sm9_enc_master_key_print(stdout, 0, 0, "sm9_enc_master_key", &enc_msk);
+			sm9_enc_master_public_key_print(stdout, 0, 0, "sm9_enc_master_public_key", &enc_msk);
 		}
 		break;
 	default:
