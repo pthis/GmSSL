@@ -1,5 +1,5 @@
 /*
- *  Copyright 2014-2024 The GmSSL Project. All Rights Reserved.
+ *  Copyright 2014-2026 The GmSSL Project. All Rights Reserved.
  *
  *  Licensed under the Apache License, Version 2.0 (the License); you may
  *  not use this file except in compliance with the License.
@@ -23,9 +23,11 @@ static const char *options =
 "Options\n"
 "\n"
 "    -alg sm9sign|sm9encrypt     Generate maeter key for sm9sign or sm9encrypt\n"
-"    -pass pass                  Password to encrypt the master private key\n"
-"    -out pem                    Output password-encrypted master private key in PEM format\n"
-"    -pubout pem                 Output master public key in PEM format\n"
+"    -in pem                     SM9 master private key in PEM format\n"
+"    -inpass pass                Password to decrypt the master private key\n"
+"    -id str                     User's identity\n"
+"    -out pem                    Output password-encrypted user's private key in PEM format\n"
+"    -outpass pass               Password to encrypt user's private key\n"
 "\n"
 "Examples\n"
 "\n"

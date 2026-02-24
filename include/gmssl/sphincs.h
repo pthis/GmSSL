@@ -246,6 +246,9 @@ typedef struct {
 	sphincs_hash128_t auth_path[SPHINCS_XMSS_HEIGHT];
 } SPHINCS_XMSS_SIGNATURE;
 
+#define SPHINCS_XMSS_SIGNATURE_SIZE sizeof(SPHINCS_XMSS_SIGNATURE)
+
+
 int sphincs_xmss_signature_print_ex(FILE *fp, int fmt, int ind, const char *label, const SPHINCS_XMSS_SIGNATURE *sig);
 int sphincs_xmss_signature_print(FILE *fp, int fmt, int ind, const char *label, const uint8_t *sig, size_t siglen);
 int sphincs_xmss_signature_to_bytes(const SPHINCS_XMSS_SIGNATURE *sig, uint8_t **out, size_t *outlen);
@@ -291,7 +294,7 @@ typedef struct {
 	sphincs_hash128_t auth_path[SPHINCS_FORS_NUM_TREES][SPHINCS_FORS_TREE_HEIGHT];
 } SPHINCS_FORS_SIGNATURE;
 
-#define SPHINCS_FORS_SIGNATURE_SIZE sizeof(SPHINCS_FORS_SIGNATURE)
+#define SPHINCS_FORS_SIGNATURE_SIZE sizeof(SPHINCS_FORS_SIGNATURE) // = 2912
 
 int sphincs_fors_signature_to_bytes(const SPHINCS_FORS_SIGNATURE *sig, uint8_t **out, size_t *outlen);
 int sphincs_fors_signature_from_bytes(SPHINCS_FORS_SIGNATURE *sig, const uint8_t **in, size_t *inlen);
@@ -339,7 +342,7 @@ typedef struct {
 	SPHINCS_XMSS_SIGNATURE xmss_sigs[SPHINCS_HYPERTREE_LAYERS];
 } SPHINCS_SIGNATURE;
 
-#define SPHINCS_SIGNATURE_SIZE sizeof(SPHINCS_SIGNATURE)
+#define SPHINCS_SIGNATURE_SIZE sizeof(SPHINCS_SIGNATURE) // =7856?
 
 int sphincs_signature_to_bytes(const SPHINCS_SIGNATURE *sig, uint8_t **out, size_t *outlen);
 int sphincs_signature_from_bytes(SPHINCS_SIGNATURE *sig, const uint8_t **in, size_t *inlen);

@@ -142,6 +142,9 @@ PrivateKeyInfo ::= SEQUENCE {
 	attributes		[0] Attributes OPTIONAL }
 */
 
+#define PKCS8_ENCED_PRIVATE_KEY_INFO_ITER 65536
+//#define PKCS8_ENCED_PRIVATE_KEY_INFO_ITER 8000 // if too slow
+
 int pkcs8_enced_private_key_info_to_der(
 	const uint8_t *salt, size_t saltlen,
 	int iter,

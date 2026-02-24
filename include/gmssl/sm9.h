@@ -42,12 +42,14 @@ int sm9_algor_to_der(int alg, int params, uint8_t **out, size_t *outlen);
 int sm9_algor_from_der(int *alg, int *params, const uint8_t **in, size_t *inlen);
 
 
-#define PEM_SM9_SIGN_MASTER_KEY		"ENCRYPTED SM9 SIGN MASTER KEY"
+// ENCRYPTED PRIVATE KEY => PKCS #8 PrivateKeyInfo => public key algro
+// FIXME: master public key should support public_key_info API
+#define PEM_SM9_SIGN_MASTER_KEY		"ENCRYPTED PRIVATE KEY" //"ENCRYPTED SM9 SIGN MASTER KEY"
 #define PEM_SM9_SIGN_MASTER_PUBLIC_KEY	"SM9 SIGN MASTER PUBLIC KEY"
-#define PEM_SM9_SIGN_PRIVATE_KEY	"ENCRYPTED SM9 SIGN PRIVATE KEY"
-#define PEM_SM9_ENC_MASTER_KEY		"ENCRYPTED SM9 ENC MASTER KEY"
+#define PEM_SM9_SIGN_PRIVATE_KEY	"ENCRYPTED PRIVATE KEY" //"ENCRYPTED SM9 SIGN PRIVATE KEY"
+#define PEM_SM9_ENC_MASTER_KEY		"ENCRYPTED PRIVATE KEY" //"ENCRYPTED SM9 ENC MASTER KEY"
 #define PEM_SM9_ENC_MASTER_PUBLIC_KEY	"SM9 ENC MASTER PUBLIC KEY"
-#define PEM_SM9_ENC_PRIVATE_KEY		"ENCRYPTED SM9 ENC PRIVATE KEY"
+#define PEM_SM9_ENC_PRIVATE_KEY		"ENCRYPTED PRIVATE KEY" //"ENCRYPTED SM9 ENC PRIVATE KEY"
 
 
 #define SM9_MAX_ID_SIZE		(SM2_MAX_ID_SIZE)
@@ -87,7 +89,10 @@ int sm9_sign_master_key_info_encrypt_to_pem(const SM9_SIGN_MASTER_KEY *msk, cons
 int sm9_sign_master_key_info_decrypt_from_pem(SM9_SIGN_MASTER_KEY *msk, const char *pass, FILE *fp);
 int sm9_sign_master_key_print(FILE *fp, int fmt, int ind, const char *label, const SM9_SIGN_MASTER_KEY *msk);
 
+#define SM9_SIGN_MASTER_PUBLIC_KEY_BYTES (1 + 32*4) // = 129
 #define SM9_SIGN_MASTER_PUBLIC_KEY_SIZE 136
+int sm9_sign_master_public_key_to_bytes(const SM9_SIGN_MASTER_KEY *msk, uint8_t **out, size_t *outlen);
+int sm9_sign_master_public_key_from_bytes(SM9_SIGN_MASTER_KEY *msk, const uint8_t **in, size_t *inlen);
 int sm9_sign_master_public_key_to_der(const SM9_SIGN_MASTER_KEY *mpk, uint8_t **out, size_t *outlen);
 int sm9_sign_master_public_key_from_der(SM9_SIGN_MASTER_KEY *mpk, const uint8_t **in, size_t *inlen);
 int sm9_sign_master_public_key_to_pem(const SM9_SIGN_MASTER_KEY *mpk, FILE *fp);
@@ -173,7 +178,10 @@ int sm9_enc_master_key_info_encrypt_to_pem(const SM9_ENC_MASTER_KEY *msk, const 
 int sm9_enc_master_key_info_decrypt_from_pem(SM9_ENC_MASTER_KEY *msk, const char *pass, FILE *fp);
 int sm9_enc_master_key_print(FILE *fp, int fmt, int ind, const char *label, const SM9_ENC_MASTER_KEY *msk);
 
+#define SM9_ENC_MASTER_PUBLIC_KEY_BYTES (1 + 32*2) // = 65
 #define SM9_ENC_MASTER_PUBLIC_KEY_SIZE 70
+int sm9_enc_master_public_key_to_bytes(const SM9_ENC_MASTER_KEY *mpk, uint8_t **out, size_t *outlen);
+int sm9_enc_master_public_key_from_bytes(SM9_ENC_MASTER_KEY *mpk, const uint8_t **in, size_t *inlen);
 int sm9_enc_master_public_key_to_der(const SM9_ENC_MASTER_KEY *mpk, uint8_t **out, size_t *outlen);
 int sm9_enc_master_public_key_from_der(SM9_ENC_MASTER_KEY *mpk, const uint8_t **in, size_t *inlen);
 int sm9_enc_master_public_key_to_pem(const SM9_ENC_MASTER_KEY *mpk, FILE *fp);

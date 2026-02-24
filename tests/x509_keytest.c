@@ -375,6 +375,7 @@ static int test_x509_sign(void)
 			error_print();
 			return -1;
 		}
+		format_print(stderr, 0, 4, "%s: %zu\n", x509_public_key_algor_name(tests[i].algor), siglen);
 		if (x509_verify_init(&sign_ctx, &x509_keys[i], args, argslen, sig, siglen) != 1) {
 			error_print();
 			return -1;
@@ -383,6 +384,65 @@ static int test_x509_sign(void)
 			error_print();
 			return -1;
 		}
+	}
+
+	printf("%s() ok\n", __FUNCTION__);
+	return 1;
+}
+
+static int test_x509_sign_sm9(void)
+{
+	SM9_SIGN_MASTER_KEY sm9_sign_master_key;
+	SM9_SIGN_KEY sm9_sign_key;
+	char *id = "guan@pku.edu.cn";
+	size_t idlen = strlen(id);
+	X509_KEY x509_key;
+	X509_SIGN_CTX sign_ctx;
+	uint8_t msg[66];
+	uint8_t sig[128]; // sm9 signature size = 104
+	size_t siglen;
+
+	if (sm9_sign_master_key_generate(&sm9_sign_master_key) != 1) {
+		error_print();
+		return -1;
+	}
+	if (sm9_sign_master_key_extract_key(&sm9_sign_master_key, id, idlen, &sm9_sign_key) != 1) {
+		error_print();
+		return -1;
+	}
+
+	if (x509_key_set_sm9_sign_key(&x509_key, &sm9_sign_key) != 1) {
+		error_print();
+		return -1;
+	}
+	if (x509_sign_init(&sign_ctx, &x509_key, NULL, 0) != 1) {
+		error_print();
+		return -1;
+	}
+	if (x509_sign_update(&sign_ctx, msg, sizeof(msg)) != 1) {
+		error_print();
+		return -1;
+	}
+	if (x509_sign_finish(&sign_ctx, sig, &siglen) != 1) {
+		error_print();
+		return -1;
+	}
+
+	if (x509_key_set_sm9_sign_master_key(&x509_key, &sm9_sign_master_key) != 1) {
+		error_print();
+		return -1;
+	}
+	if (x509_verify_init(&sign_ctx, &x509_key, id, idlen, sig, siglen) != 1) {
+		error_print();
+		return -1;
+	}
+	if (x509_verify_update(&sign_ctx, msg, sizeof(msg)) != 1) {
+		error_print();
+		return -1;
+	}
+	if (x509_verify_finish(&sign_ctx) != 1) {
+		error_print();
+		return -1;
 	}
 
 	printf("%s() ok\n", __FUNCTION__);
@@ -510,6 +570,7 @@ int main(void)
 	if (test_x509_private_key_info_encrypt_to_der() != 1) goto err;
 	if (test_x509_private_key_info_encrypt_to_pem() != 1) goto err;
 	if (test_x509_sign() != 1) goto err;
+	if (test_x509_sign_sm9() != 1) goto err;
 	if (test_x509_key_exchange() != 1) goto err;
 	if (test_x509_kem() != 1) goto err;
 

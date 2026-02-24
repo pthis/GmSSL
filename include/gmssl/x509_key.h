@@ -19,6 +19,7 @@
 #include <gmssl/oid.h>
 #include <gmssl/asn1.h>
 #include <gmssl/sm2.h>
+#include <gmssl/sm9.h>
 #include <gmssl/secp256r1_key.h>
 #include <gmssl/ecdsa.h>
 #include <gmssl/lms.h>
@@ -44,6 +45,8 @@ typedef struct {
 		XMSSMT_KEY xmssmt_key;
 		SPHINCS_KEY sphincs_key;
 		KYBER_KEY kyber_key;
+		SM9_SIGN_MASTER_KEY sm9_sign_master_key; // OID_sm9,OID_sm9sign
+		SM9_SIGN_KEY sm9_sign_key; // OID_sm9sign,OID_undef
 	} u;
 } X509_KEY;
 
@@ -55,16 +58,18 @@ int x509_key_set_xmss_key(X509_KEY *x509_key, const XMSS_KEY *xmss_key);
 int x509_key_set_xmssmt_key(X509_KEY *x509_key, const XMSSMT_KEY *xmssmt_key);
 int x509_key_set_sphincs_key(X509_KEY *x509_key, const SPHINCS_KEY *sphincs_key);
 int x509_key_set_kyber_key(X509_KEY *x509_key, const KYBER_KEY *kyber_key);
+int x509_key_set_sm9_sign_key(X509_KEY *x509_key, const SM9_SIGN_KEY *sm9_sign_key);
+int x509_key_set_sm9_sign_master_key(X509_KEY *x509_key, const SM9_SIGN_MASTER_KEY *sm9_sign_master_key);
 
 /*
-   algor:			algor_param:
+   algor:			param				paramlen
    -------------------------------------------------------------------------
-   OID_ec_public_key		OID_sm2 or OID_secp256r1
-   OID_lms_hashsig		lms_type
-   OID_hss_lms_hashsig		x509_algor_param_from_lms_types(lms_types[])
-   OID_xmsss_hashsig		xmss_type
-   OID_xmsssmt_hashsig		xmssmt_type
-   OID_sphincs_hashsig		OID_undef
+   OID_ec_public_key		OID_sm2 or OID_secp256r1	sizeof(oid)
+   OID_lms_hashsig		lms_type			sizeof(lms_type)
+   OID_hss_lms_hashsig		lms_types[]			sizeof(lms_types[])
+   OID_xmsss_hashsig		xmss_type			sizeof(xmss_type)
+   OID_xmsssmt_hashsig		xmssmt_type			sizeof(xmssmt_type)
+   OID_sphincs_hashsig		NULL				0
 */
 int x509_key_generate(X509_KEY *key, int algor, const void *param, size_t paramlen);
 void x509_key_cleanup(X509_KEY *key);
@@ -123,21 +128,24 @@ int x509_private_key_info_from_der(X509_KEY *key, const uint8_t **attrs, size_t 
 // TODO: no x509_private_key_info_print
 
 // PKCS #8 EncryptedPrivateKeyInfo
-#define PKCS8_ENCED_PRIVATE_KEY_INFO_ITER 65536
 int x509_private_key_info_encrypt_to_der(const X509_KEY *x509_key, const char *pass,
 	uint8_t **out, size_t *outlen);
 int x509_private_key_info_decrypt_from_der(X509_KEY *x509_key,
 	const uint8_t **attrs, size_t *attrs_len,
 	const char *pass, const uint8_t **in, size_t *inlen);
+// require stdio
+int x509_private_key_info_encrypt_to_pem(const X509_KEY *key, const char *pass, FILE *fp);
+int x509_private_key_info_decrypt_from_pem(X509_KEY *key, const uint8_t **attrs, size_t *attrslen, const char *pass, FILE *fp);
+int x509_private_key_from_file(X509_KEY *key, int algor, const char *pass, FILE *fp);
 
 
 
 // SM2_SIGNATURE_MAX_SIZE = 72
 // LMS_SIGNATURE_MAX_SIZE = 1932
-// HSS_SIGNATURE_MAX_SIZE = ?
+// HSS_SIGNATURE_MAX_SIZE = 9888?
 // XMSS_SIGNATURE_MAX_SIZE = 2820
-// XMSSMT_SIGNATURE_MAX_SIZE >= 27688 ?
-// SPHINCS_SIGNATURE_SIZE = ?
+// XMSSMT_SIGNATURE_MAX_SIZE = 8356?
+// SPHINCS_SIGNATURE_SIZE = 7856?
 // ECDSA_SIGNATURE_MAX_SIZE = 72
 
 typedef union {
@@ -158,14 +166,18 @@ typedef struct {
 		SM2_SIGN_CTX sm2_sign_ctx;
 		SM2_VERIFY_CTX sm2_verify_ctx;
 		ECDSA_SIGN_CTX ecdsa_sign_ctx;
+		SM9_SIGN_CTX sm9_sign_ctx;
 		LMS_SIGN_CTX lms_sign_ctx;
 		HSS_SIGN_CTX hss_sign_ctx;
 		XMSS_SIGN_CTX xmss_sign_ctx;
 		XMSSMT_SIGN_CTX xmssmt_sign_ctx;
 		SPHINCS_SIGN_CTX sphincs_sign_ctx;
 	} u;
+	X509_KEY key;
+	const void *args;
+	size_t argslen;
 	int sign_algor;
-	uint8_t sig[X509_SIGNATURE_MAX_SIZE];
+	const uint8_t *sig;
 	size_t siglen;
 	size_t fixed_siglen;
 } X509_SIGN_CTX;
@@ -184,18 +196,14 @@ typedef struct {
 int x509_key_get_sign_algor(const X509_KEY *key, int *algor);
 int x509_key_get_signature_size(const X509_KEY *key, size_t *siglen);
 
-// args, argslen:
-//	sm2	SM2_DEFAULT_ID, SM2_DEFAULT_ID_LENGTH
-//		TLS13_SM2_ID, TLS13_SM2_ID_LENGTH
-//	sphincs	optiona_random, 16
-
-
 /*
-  x509_sign_init argumetns
+  x509_sign_init
 
     x509_key->algor:algor_param	    ctx->sign_algor       args         argslen
     ------------------------------------------------------------------------------------------------
     OID_ec_public_key:OID_sm2       OID_sm2sign_with_sm3  char *id     idlen
+                                                          SM2_DEFAULT_ID[_LENGTH]
+                                                          TLS13_SM2_ID[_LENGTH] for TLS1.3
                                                           NULL         0    use SM2_DEFAULT_ID
     OID_ec_public_key:OID_secp256r1 OID_ecdsa_with_sha256 NULL         0
     OID_lms_hashsig:OID_undef       OID_lms_hashsig       NULL         0
@@ -226,11 +234,6 @@ int x509_key_exchange(const X509_KEY *key, const uint8_t *peer_pub, size_t peer_
 int x509_key_encapsulate(const X509_KEY *key, uint8_t *ciphertext, size_t *ciphertext_len, uint8_t secret[32]);
 int x509_key_decapsulate(const X509_KEY *key, const uint8_t *ciphertext, size_t ciphertext_len, uint8_t secret[32]);
 
-
-// require stdio
-int x509_private_key_info_encrypt_to_pem(const X509_KEY *key, const char *pass, FILE *fp);
-int x509_private_key_info_decrypt_from_pem(X509_KEY *key, const uint8_t **attrs, size_t *attrslen, const char *pass, FILE *fp);
-int x509_private_key_from_file(X509_KEY *key, int algor, const char *pass, FILE *fp);
 
 
 #ifdef __cplusplus

@@ -22,6 +22,22 @@ static int lms_types[] = {
 	LMS_HASH256_M32_H5,
 };
 
+static int test_print_consts(void)
+{
+	format_print(stderr, 0, 4, "sizeof(LMS_PUBLIC_KEY): %zu\n", sizeof(LMS_PUBLIC_KEY));
+	format_print(stderr, 0, 4, "LMS_PUBLIC_KEY_SIZE: %zu\n", LMS_PUBLIC_KEY_SIZE);
+	format_print(stderr, 0, 4, "LMS_PRIVATE_KEY_SIZE: %zu\n", LMS_PRIVATE_KEY_SIZE);
+	format_print(stderr, 0, 4, "sizeof(LMS_SIGNATURE): %zu\n", sizeof(LMS_SIGNATURE));
+	format_print(stderr, 0, 4, "LMS_SIGNATURE_MAX_SIZE: %zu\n", LMS_SIGNATURE_MAX_SIZE);
+	format_print(stderr, 0, 4, "sizeof(HSS_PUBLIC_KEY): %zu\n", sizeof(HSS_PUBLIC_KEY));
+	format_print(stderr, 0, 4, "HSS_PUBLIC_KEY_SIZE: %zu\n", HSS_PUBLIC_KEY_SIZE);
+	format_print(stderr, 0, 4, "HSS_PRIVATE_KEY_MAX_SIZE: %zu\n", HSS_PRIVATE_KEY_MAX_SIZE);
+	format_print(stderr, 0, 4, "sizeof(HSS_SIGNATURE): %zu\n", sizeof(HSS_SIGNATURE));
+	format_print(stderr, 0, 4, "HSS_SIGNATURE_MAX_SIZE: %zu\n", HSS_SIGNATURE_MAX_SIZE);
+
+	printf("%s() ok\n", __FUNCTION__);
+	return 1;
+}
 
 #if defined(ENABLE_LMS_CROSSCHECK) && defined(ENABLE_SHA2)
 static int test_rfc8554_test1(void)
@@ -1030,6 +1046,7 @@ static int test_hss_public_key_algor(void)
 
 int main(void)
 {
+	if (test_print_consts() != 1) goto err;
 #if defined(ENABLE_LMS_CROSSCHECK) && defined(ENABLE_SHA2)
 	if (test_rfc8554_test1() != 1) goto err;
 #endif

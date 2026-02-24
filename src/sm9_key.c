@@ -106,6 +106,40 @@ int sm9_sign_master_key_from_der(SM9_SIGN_MASTER_KEY *msk, const uint8_t **in, s
 	return 1;
 }
 
+int sm9_sign_master_public_key_to_bytes(const SM9_SIGN_MASTER_KEY *mpk, uint8_t **out, size_t *outlen)
+{
+	if (!mpk || !outlen) {
+		error_print();
+		return -1;
+	}
+	if (out && *out) {
+		sm9_z256_twist_point_to_uncompressed_octets(&mpk->Ppubs, *out);
+		*out += 1 + 32 * 4;
+	}
+	*outlen += 1 + 32 * 4;
+	return 1;
+}
+
+int sm9_sign_master_public_key_from_bytes(SM9_SIGN_MASTER_KEY *mpk, const uint8_t **in, size_t *inlen)
+{
+	if (!mpk || !in || !(*in) || !inlen) {
+		error_print();
+		return -1;
+	}
+	if (*inlen < 1 + 32 * 4) {
+		error_print();
+		return -1;
+	}
+	memset(mpk, 0, sizeof(SM9_SIGN_MASTER_KEY));
+	if (sm9_z256_twist_point_from_uncompressed_octets(&mpk->Ppubs, *in) != 1) {
+		error_print();
+		return -1;
+	}
+	*in += 1 + 32 * 4;
+	*inlen -= 1 + 32 * 4;
+	return 1;
+}
+
 int sm9_sign_master_public_key_to_der(const SM9_SIGN_MASTER_KEY *mpk, uint8_t **out, size_t *outlen)
 {
 	uint8_t Ppubs[1 + 32 * 4];
@@ -255,6 +289,40 @@ int sm9_enc_master_key_from_der(SM9_ENC_MASTER_KEY *msk, const uint8_t **in, siz
 		error_print();
 		return -1;
 	}
+	return 1;
+}
+
+int sm9_enc_master_public_key_to_bytes(const SM9_ENC_MASTER_KEY *mpk, uint8_t **out, size_t *outlen)
+{
+	if (!mpk || !outlen) {
+		error_print();
+		return -1;
+	}
+	if (out && *out) {
+		sm9_z256_point_to_uncompressed_octets(&mpk->Ppube, *out);
+		*out += 1 + 32 * 2;
+	}
+	*outlen += 1 + 32 * 2;
+	return 1;
+}
+
+int sm9_enc_master_public_key_from_bytes(SM9_ENC_MASTER_KEY *mpk, const uint8_t **in, size_t *inlen)
+{
+	if (!mpk || !in || !(*in) || !inlen) {
+		error_print();
+		return -1;
+	}
+	if (*inlen < 1 + 32 * 2) {
+		error_print();
+		return -1;
+	}
+	memset(mpk, 0, sizeof(SM9_ENC_MASTER_KEY));
+	if (sm9_z256_point_from_uncompressed_octets(&mpk->Ppube, *in) != 1) {
+		error_print();
+		return -1;
+	}
+	*in += 1 + 32 * 2;
+	*inlen -= 1 + 32 * 2;
 	return 1;
 }
 

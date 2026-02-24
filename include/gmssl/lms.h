@@ -266,7 +266,12 @@ typedef struct {
 	LMS_SIGNATURE msg_lms_sig; // = sign(hss->lms_key[levels-1], msg)
 } HSS_SIGNATURE;
 
-#define HSS_SIGNATURE_MAX_SIZE sizeof(HSS_SIGNATURE)
+// not correct					
+#define HSS_SIGNATURE_MAX_SIZE ( \
+		sizeof(uint32_t) + \
+		(LMS_SIGNATURE_MAX_SIZE + LMS_PUBLIC_KEY_SIZE) * (HSS_MAX_LEVELS - 1) + \
+		LMS_SIGNATURE_MAX_SIZE)
+
 int hss_signature_size(const int *lms_types, size_t levels, size_t *len);
 int hss_signature_to_bytes(const HSS_SIGNATURE *sig, uint8_t **out, size_t *outlen);
 int hss_signature_from_bytes(HSS_SIGNATURE *sig, const uint8_t **in, size_t *inlen);

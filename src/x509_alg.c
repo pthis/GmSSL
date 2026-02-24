@@ -245,6 +245,13 @@ err:
 }
 
 
+#define oid_sm9_algor oid_sm_algors,302
+static uint32_t oid_sm9[] = { oid_sm9_algor };
+static uint32_t oid_sm9sign[] = { oid_sm9_algor,1 };
+static uint32_t oid_sm9keyagreement[] = { oid_sm9_algor,2 };
+static uint32_t oid_sm9encrypt[] = { oid_sm9_algor,3 };
+
+
 static uint32_t oid_sm2sign_with_sm3[] = { 1,2,156,10197,1,501 };
 static uint32_t oid_rsasign_with_sm3[] = { 1,2,156,10197,1,504 };
 static uint32_t oid_ecdsa_with_sha1[] = { 1,2,840,10045,4,1 };
@@ -355,6 +362,7 @@ from RFC 5758 Internet X.509 Public Key Infrastructure:
 
 static const ASN1_OID_INFO x509_sign_algors[] = {
 	{ OID_sm2sign_with_sm3, "sm2sign-with-sm3", oid_sm2sign_with_sm3, sizeof(oid_sm2sign_with_sm3)/sizeof(int), SM2_SIGN_ALGOR_FLAGS },
+	{ OID_sm9sign, "sm9sign", oid_sm9sign, sizeof(oid_sm9sign)/sizeof(int), 1 },
 	{ OID_rsasign_with_sm3, "rsasign-with-sm3", oid_rsasign_with_sm3, sizeof(oid_rsasign_with_sm3)/sizeof(int), 1 },
 	{ OID_ecdsa_with_sha1, "ecdsa-with-sha1", oid_ecdsa_with_sha1, sizeof(oid_ecdsa_with_sha1)/sizeof(int), 0 },
 	{ OID_ecdsa_with_sha224, "ecdsa-with-sha224", oid_ecdsa_with_sha224, sizeof(oid_ecdsa_with_sha224)/sizeof(int), 0 } ,
@@ -488,6 +496,7 @@ static uint32_t oid_rsaes_oaep[] = { 1,2,840,113549,1,1,7 };
 
 static const ASN1_OID_INFO x509_pke_algors[] = {
 	{ OID_sm2encrypt, "sm2encrypt", oid_sm2encrypt, sizeof(oid_sm2encrypt)/sizeof(int) },
+	{ OID_sm9encrypt, "sm9encrypt", oid_sm9encrypt, sizeof(oid_sm9encrypt)/sizeof(int) },
 	{ OID_rsa_encryption, "rsaEncryption", oid_rsa_encryption, sizeof(oid_rsa_encryption)/sizeof(int) },
 	{ OID_rsaes_oaep, "rsaesOAEP", oid_rsaes_oaep, sizeof(oid_rsaes_oaep)/sizeof(int) },
 };
@@ -592,18 +601,13 @@ static uint32_t oid_ec_public_key[] = { oid_x9_62,2,1 };
 
 static const ASN1_OID_INFO x509_public_key_algors[] = {
 	{ OID_ec_public_key, "ecPublicKey", oid_ec_public_key, sizeof(oid_ec_public_key)/sizeof(int), 0, "X9.62 ecPublicKey" },
+	{ OID_sm9, "sm9", oid_sm9, sizeof(oid_sm9)/sizeof(int), 0, "SM9" },
 	{ OID_rsa_encryption, "rsaEncryption", oid_rsa_encryption, sizeof(oid_rsa_encryption)/sizeof(int), 0, "RSAEncryption" },
-#ifdef ENABLE_LMS
 	{ OID_lms_hashsig, "lms-hashsig", oid_lms_hashsig, sizeof(oid_lms_hashsig)/sizeof(int), 0, "HSS/LMS HashSig" },
 	{ OID_hss_lms_hashsig, "hss-lms-hashsig", oid_hss_lms_hashsig, sizeof(oid_hss_lms_hashsig)/sizeof(int), 0, "HSS/LMS HashSig" },
-#endif
-#ifdef ENABLE_XMSS
 	{ OID_xmss_hashsig, "xmss-hashsig", oid_xmss_hashsig, sizeof(oid_xmss_hashsig)/sizeof(int), 1 },
 	{ OID_xmssmt_hashsig, "xmssmt-hashsig", oid_xmssmt_hashsig, sizeof(oid_xmssmt_hashsig)/sizeof(int), 1 },
-#endif
-#ifdef ENABLE_SPHINCS
 	{ OID_sphincs_hashsig, "sphincs-hashsig", oid_sphincs_hashsig, sizeof(oid_sphincs_hashsig)/sizeof(int), 1 },
-#endif
 	{ OID_kyber_kem, "kyber-kem", oid_kyber_kem, sizeof(oid_kyber_kem)/sizeof(int), 1 },
 };
 
@@ -630,7 +634,6 @@ int x509_public_key_algor_from_name(const char *name)
 	return info->oid;
 }
 
-// FIXME: add kyber, and use same code for LMS/XMSS/SPHINCS...
 int x509_public_key_algor_to_der(int oid, int curve_or_null, uint8_t **out, size_t *outlen)
 {
 	size_t len = 0;
@@ -646,6 +649,17 @@ int x509_public_key_algor_to_der(int oid, int curve_or_null, uint8_t **out, size
 			return -1;
 		}
 		break;
+	case OID_sm9:
+		if (asn1_object_identifier_to_der(oid_sm9, sizeof(oid_sm9)/sizeof(int), NULL, &len) != 1
+			|| asn1_sequence_header_to_der(len, out, outlen) != 1
+			|| asn1_object_identifier_to_der(oid_sm9, sizeof(oid_sm9)/sizeof(int), out, outlen) != 1) {
+			error_print();
+			return -1;
+		}
+		break;
+
+
+
 	case OID_rsa_encryption:
 		if (asn1_object_identifier_to_der(oid_rsa_encryption, sizeof(oid_rsa_encryption)/sizeof(int), NULL, &len) != 1
 			|| asn1_null_to_der(NULL, &len) != 1
@@ -773,14 +787,11 @@ int x509_public_key_algor_from_der(int *oid , int *curve_or_null, const uint8_t 
 		*curve_or_null = OID_undef;
 		break;
 
-#ifdef ENABLE_LMS
+	case OID_sm9:
 	case OID_lms_hashsig:
 	case OID_hss_lms_hashsig:
-#endif
-#ifdef ENABLE_XMSS
 	case OID_xmss_hashsig:
 	case OID_xmssmt_hashsig:
-#endif
 	case OID_sphincs_hashsig:
 	case OID_kyber_kem:
 		// for hashsigs, parmaeters is set to empty
@@ -817,15 +828,12 @@ int x509_public_key_algor_print(FILE *fp, int fmt, int ind, const char *label, c
 		if (ec_named_curve_from_der(&val, &d, &dlen) != 1) goto err;
 		format_print(fp, fmt, ind, "namedCurve: %s\n", ec_named_curve_name(val));
 		break;
+	case OID_sm9:
 	case OID_rsa_encryption:
-#ifdef ENABLE_LMS
 	case OID_lms_hashsig:
 	case OID_hss_lms_hashsig:
-#endif
-#ifdef ENABLE_XMSS
 	case OID_xmss_hashsig:
 	case OID_xmssmt_hashsig:
-#endif
 	case OID_sphincs_hashsig:
 		if ((val = asn1_null_from_der(&d, &dlen)) < 0) goto err;
 		else if (val) format_print(fp, fmt, ind, "parameters: %s\n", asn1_null_name());
