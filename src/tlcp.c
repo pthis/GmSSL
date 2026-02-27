@@ -25,6 +25,21 @@
 #include <gmssl/tls.h>
 
 
+// sign_master_public_key, enc_master_public_key, sign_key, enc_key
+int tls_ctx_set_sm9_keys(TLS_CTX *ctx, const char *masterfile,
+	const char *keyfile, const char *keypass)
+{
+	// 从masterfile中读取两个
+
+
+	// 从keyfile中读取两个密钥
+
+
+	return -1;
+}
+
+
+// TLCP的套件和TLS12不一样，我们现在只支持一种									
 static const int tlcp_ciphers[] = { TLS_cipher_ecc_sm4_cbc_sm3 };
 static const size_t tlcp_ciphers_count = sizeof(tlcp_ciphers)/sizeof(tlcp_ciphers[0]);
 
@@ -36,6 +51,8 @@ int tlcp_record_print(FILE *fp, const uint8_t *record,  size_t recordlen, int fo
 	format |= tlcp_ciphers[0] << 8;
 	return tls_record_print(fp, record, recordlen, format, indent);
 }
+
+
 
 /*
 select (KeyExchangeAlgorithm) {
@@ -49,6 +66,11 @@ select (KeyExchangeAlgorithm) {
 } ServerKeyExchange;
 
 -- in TLCP 1.1, the `signed_params` is DER signature encoded in uint16array
+
+
+在TLS12中，ServerKeyExchange中是有ECDH公钥的，但是在TLCP中
+
+
 */
 int tlcp_record_set_handshake_server_key_exchange_pke(uint8_t *record, size_t *recordlen,
 	const uint8_t *sig, size_t siglen)
@@ -128,7 +150,7 @@ int tlcp_server_key_exchange_pke_print(FILE *fp, const uint8_t *data, size_t dat
 	return 1;
 }
 
-int tlcp_do_connect(TLS_CONNECT *conn)
+int _tlcp_do_connect(TLS_CONNECT *conn)
 {
 	int ret = -1;
 	uint8_t *record = conn->record;
@@ -174,7 +196,7 @@ int tlcp_do_connect(TLS_CONNECT *conn)
 	int verify_result;
 
 
-	// 初始化记录缓冲
+	// 初始化记录缓冲，这里的主要区别在于，版本号是确定的！				
 	tls_record_set_protocol(record, TLS_protocol_tlcp);
 	tls_record_set_protocol(finished_record, TLS_protocol_tlcp);
 
@@ -256,9 +278,11 @@ int tlcp_do_connect(TLS_CONNECT *conn)
 	sm3_update(&sm3_ctx, record + 5, recordlen - 5);
 
 	// verify ServerCertificate
-	if (conn->ca_certs_len) {
+	if (conn->ca_certs_len) { // 这里不对啊，如果没准备CA证书，难道就不验证服务器证书了吗				
 		// 只有提供了CA证书才验证服务器证书链
 		// FIXME: 逻辑需要再检查
+		// 这里验证证书链的逻辑和TLS12不同				
+		// 但是证书链的验证逻辑可以根据协议的差异来选择				
 		if (x509_certs_verify_tlcp(conn->server_certs, conn->server_certs_len, X509_cert_chain_server,
 			conn->ca_certs, conn->ca_certs_len, depth, &verify_result) != 1) {
 			error_print();
@@ -276,6 +300,7 @@ int tlcp_do_connect(TLS_CONNECT *conn)
 		goto end;
 	}
 	tlcp_record_trace(stderr, record, recordlen, 0, 0);
+	// 显然这是一个TLCP独特的版本					
 	if (tlcp_record_get_handshake_server_key_exchange_pke(record, &sig, &siglen) != 1) {
 		error_print();
 		tls_send_alert(conn, TLS_alert_unexpected_message);
@@ -284,6 +309,7 @@ int tlcp_do_connect(TLS_CONNECT *conn)
 	sm3_update(&sm3_ctx, record + 5, recordlen - 5);
 
 	// verify ServerKeyExchange
+	// 这个策略应该没有什么不同，因为都是用第一个证书来验证签名
 	if (x509_certs_get_cert_by_index(conn->server_certs, conn->server_certs_len, 0, &cp, &len) != 1
 		|| x509_cert_get_subject_public_key(cp, len, &server_sign_key) != 1
 		|| x509_certs_get_cert_by_index(conn->server_certs, conn->server_certs_len, 1, &server_enc_cert, &server_enc_cert_len) != 1
@@ -419,8 +445,10 @@ int tlcp_do_connect(TLS_CONNECT *conn)
 
 	// send ClientKeyExchange
 	tls_trace("send ClientKeyExchange\n");
+	// 这里是比较特殊的，这里应该改为用X509_KEY的API，这样可以支持SM9等			
 	if (sm2_encrypt(&server_enc_key.u.sm2_key, pre_master_secret, 48,
 			enced_pre_master_secret, &enced_pre_master_secret_len) != 1
+		// 这个函数是TLCP专属的								
 		|| tls_record_set_handshake_client_key_exchange_pke(record, &recordlen,
 			enced_pre_master_secret, enced_pre_master_secret_len) != 1) {
 		error_print();
@@ -580,7 +608,7 @@ end:
 	return ret;
 }
 
-int tlcp_do_accept(TLS_CONNECT *conn)
+int _tlcp_do_accept(TLS_CONNECT *conn)
 {
 	int ret = -1;
 
@@ -680,7 +708,7 @@ int tlcp_do_accept(TLS_CONNECT *conn)
 		goto end;
 	}
 	if (exts) {
-		// 忽略客户端扩展错误可以兼容错误的TLCP客户端实现
+		// 忽略客户端扩展错误可以兼容错误的TLCP客户端实现			
 		error_print();
 		tls_send_alert(conn, TLS_alert_unexpected_message);
 		goto end;
@@ -738,6 +766,7 @@ int tlcp_do_accept(TLS_CONNECT *conn)
 		tls_send_alert(conn, TLS_alert_internal_error);
 		goto end;
 	}
+	// 需要检查一下TLCP和TLS12在这个消息上的差异是什么				
 	if (tlcp_record_set_handshake_server_key_exchange_pke(record, &recordlen, sigbuf, siglen) != 1) {
 		error_print();
 		tls_send_alert(conn, TLS_alert_internal_error);
@@ -819,11 +848,13 @@ int tlcp_do_accept(TLS_CONNECT *conn)
 		goto end;
 	}
 	tlcp_record_trace(stderr, record, recordlen, 0, 0);
+	// tls_record_get_handshake_client_key_exchange_pke 这个函数有问题，只用于TLCP的，应该放在TLCP文件中			
 	if (tls_record_get_handshake_client_key_exchange_pke(record, &enced_pms, &enced_pms_len) != 1) {
 		error_print();
 		tls_send_alert(conn, TLS_alert_unexpected_message);
 		goto end;
 	}
+	// 这个处理是TLCP专属的
 	if (sm2_decrypt(&conn->kenc_key.u.sm2_key, enced_pms, enced_pms_len,
 		pre_master_secret, &pre_master_secret_len) != 1) {
 		error_print();
@@ -1021,3 +1052,379 @@ end:
 	gmssl_secure_clear(pre_master_secret, sizeof(pre_master_secret));
 	return ret;
 }
+
+/*
+	SM9_SM4_CBC_SM3
+
+	opaque SM9SignMasterPublicKey<0..2^24-1>;
+	struct {
+		opaque id<1..2^16-1>; // server's domain name, equivalent to entity cert
+		SM9SignMasterPublicKey sign_params; // equavalent to ca root cert, optional
+	} Certificate;
+
+	opaque SM9EncMasterPublicKey<0..2^24-1>;
+	struct {
+		SM9EncMasterPublicKey enc_params;
+		digitally-signed struct {
+			opaque client_random[32];
+			opaque server_random[32];
+			SM9EncMasterPublicKey enc_params;
+			opaque id<1..2^16-1>;
+		} signed_params;
+	} ServerKeyExchange;
+
+	struct {
+		opaque encrypted_pre_master_secret<0..2^16-1>;
+	} ClientKeyExchange
+
+*/
+
+
+/*
+      Client                                               Server
+
+      ClientHello                  -------->
+                                                      ServerHello
+                                                      Certificate
+                                                ServerKeyExchange
+                                              CertificateRequest*
+                                   <--------      ServerHelloDone
+      Certificate*
+      ClientKeyExchange
+      CertificateVerify*
+      [ChangeCipherSpec]
+      Finished                     -------->
+                                               [ChangeCipherSpec]
+                                   <--------             Finished
+      Application Data             <------->     Application Data
+
+
+*/
+
+int tlcp_do_client_handshake(TLS_CONNECT *conn)
+{
+	int ret;
+	int next_state;
+
+	switch (conn->state) {
+	case TLS_state_client_hello:
+		ret = tlcp_send_client_hello(conn);
+		next_state = TLS_state_server_hello;
+		break;
+
+	case TLS_state_server_hello:
+		ret = tls_recv_server_hello(conn);
+		next_state = TLS_state_server_certificate;
+		break;
+
+	case TLS_state_server_certificate:
+		ret = tls_recv_server_certificate(conn);
+		next_state = TLS_state_server_key_exchange;
+		break;
+
+	case TLS_state_server_key_exchange:
+		ret = tlcp_recv_server_key_exchange(conn);
+		next_state = TLS_state_certificate_request;
+		break;
+
+	case TLS_state_certificate_request:
+		ret = tls_recv_certificate_request(conn);
+		if (ret == 1) conn->client_certificate_verify = 1;
+		next_state = TLS_state_server_hello_done;
+		break;
+
+	case TLS_state_server_hello_done:
+		ret = tls_recv_server_hello_done(conn);
+		if (conn->client_certificate_verify)
+			next_state = TLS_state_client_certificate;
+		else	next_state = TLS_state_client_key_exchange;
+		break;
+
+	case TLS_state_client_certificate:
+		ret = tls_send_client_certificate(conn);
+		next_state = TLS_state_client_key_exchange;
+		break;
+
+	case TLS_state_client_key_exchange:
+		ret = tlcp_send_client_key_exchange(conn);
+		next_state = TLS_state_generate_keys;
+		break;
+
+	case TLS_state_generate_keys:
+		ret = tlcp_generate_keys(conn);
+		if (conn->client_certificate_verify)
+			next_state = TLS_state_certificate_verify;
+		else	next_state = TLS_state_client_change_cipher_spec;
+		break;
+
+	case TLS_state_certificate_verify:
+		ret = tls_send_certificate_verify(conn);
+		next_state = TLS_state_client_change_cipher_spec;
+
+	case TLS_state_client_change_cipher_spec:
+		ret = tls_send_change_cipher_spec(conn);
+		next_state = TLS_state_client_finished;
+		break;
+
+	case TLS_state_client_finished:
+		ret = tls_send_client_finished(conn);
+		next_state = TLS_state_server_change_cipher_spec;
+		break;
+
+	case TLS_state_server_change_cipher_spec:
+		ret = tls_recv_change_cipher_spec(conn);
+		next_state = TLS_state_server_finished;
+		break;
+
+	case TLS_state_server_finished:
+		ret = tls_recv_server_finished(conn);
+		next_state = TLS_state_handshake_over;
+		break;
+
+	default:
+		error_print();
+		return -1;
+	}
+
+	if (ret < 0) {
+		if (ret == TLS_ERROR_RECV_AGAIN || ret == TLS_ERROR_SEND_AGAIN) {
+			return ret;
+		} else {
+			error_print();
+			return ret;
+		}
+	}
+
+	conn->state = next_state;
+
+	// ret == 0 means this step is bypassed
+	if (ret == 1) {
+		tls_clean_record(conn);
+	}
+
+	return 1;
+}
+
+int tlcp_do_server_handshake(TLS_CONNECT *conn)
+{
+	int ret;
+	int next_state;
+
+	switch (conn->state) {
+	case TLS_state_client_hello:
+		ret = tlcp_recv_client_hello(conn);
+		next_state = TLS_state_server_hello;
+		break;
+
+	case TLS_state_server_hello:
+		ret = tls_send_server_hello(conn);
+		next_state = TLS_state_server_certificate;
+		break;
+
+	case TLS_state_server_certificate:
+		ret = tls_send_server_certificate(conn);
+		next_state = TLS_state_server_key_exchange;
+		break;
+
+	case TLS_state_server_key_exchange:
+		ret = tlcp_send_server_key_exchange(conn);
+		if (conn->client_certificate_verify)
+			next_state = TLS_state_certificate_request;
+		else	next_state = TLS_state_server_hello_done;
+		break;
+
+	case TLS_state_certificate_request:
+		ret = tls_send_certificate_request(conn);
+		next_state = TLS_state_server_hello_done;
+		break;
+
+	case TLS_state_server_hello_done:
+		ret = tls_send_server_hello_done(conn);
+		if (conn->client_certificate_verify)
+			next_state = TLS_state_client_certificate;
+		else	next_state = TLS_state_client_key_exchange;
+		break;
+
+	case TLS_state_client_certificate:
+		ret = tls_recv_client_certificate(conn);
+		next_state = TLS_state_client_key_exchange;
+		break;
+
+	case TLS_state_client_key_exchange:
+		ret = tlcp_recv_client_key_exchange(conn);
+		if (conn->client_certificate_verify)
+			next_state = TLS_state_certificate_verify;
+		else	next_state = TLS_state_generate_keys;
+		break;
+
+	case TLS_state_certificate_verify:
+		ret = tls_recv_certificate_verify(conn);
+		next_state = TLS_state_generate_keys;
+		break;
+
+	case TLS_state_generate_keys:
+		ret = tlcp_generate_keys(conn);
+		next_state = TLS_state_client_change_cipher_spec;
+		break;
+
+	case TLS_state_client_change_cipher_spec:
+		ret = tls_recv_change_cipher_spec(conn);
+		next_state = TLS_state_client_finished;
+		break;
+
+	case TLS_state_client_finished:
+		ret = tls_recv_client_finished(conn);
+		next_state = TLS_state_server_change_cipher_spec;
+		break;
+
+	case TLS_state_server_change_cipher_spec:
+		ret = tls_send_change_cipher_spec(conn);
+		next_state = TLS_state_server_finished;
+		break;
+
+	case TLS_state_server_finished:
+		ret = tls_send_server_finished(conn);
+		next_state = TLS_state_handshake_over;
+		break;
+
+	default:
+		error_print();
+		return -1;
+	}
+
+	if (ret != 1) {
+		if (ret == TLS_ERROR_RECV_AGAIN || ret == TLS_ERROR_SEND_AGAIN) {
+			return ret;
+		} else {
+			error_print();
+			return ret;
+		}
+
+	}
+
+	conn->state = next_state;
+
+	tls_clean_record(conn);
+
+	return 1;
+}
+
+int tlcp_client_handshake(TLS_CONNECT *conn)
+{
+	int ret;
+
+	while (conn->state != TLS_state_handshake_over) {
+
+		ret = tlcp_do_client_handshake(conn);
+
+		if (ret != 1) {
+			if (ret != TLS_ERROR_RECV_AGAIN && ret != TLS_ERROR_SEND_AGAIN) {
+				error_print();
+			}
+			return ret;
+		}
+	}
+
+	// TODO: cleanup conn?
+
+	return 1;
+}
+
+int tlcp_server_handshake(TLS_CONNECT *conn)
+{
+	int ret;
+
+
+	while (conn->state != TLS_state_handshake_over) {
+
+		ret = tlcp_do_server_handshake(conn);
+
+		if (ret != 1) {
+			if (ret != TLS_ERROR_RECV_AGAIN && ret != TLS_ERROR_SEND_AGAIN) {
+				error_print();
+			}
+			return ret;
+		}
+	}
+
+	// TODO: cleanup conn?
+
+	return 1;
+}
+
+int tlcp_do_connect(TLS_CONNECT *conn)
+{
+	int ret;
+	fd_set rfds;
+	fd_set wfds;
+
+	// 应该把protocol_version的初始化放在这里
+
+	conn->state = TLS_state_client_hello;
+	sm3_init(&conn->sm3_ctx);
+
+	while (1) {
+
+		ret = tlcp_client_handshake(conn);
+		if (ret == 1) {
+			break;
+
+		} else if (ret == TLS_ERROR_SEND_AGAIN) {
+			FD_ZERO(&rfds);
+			FD_ZERO(&wfds);
+			FD_SET(conn->sock, &rfds);
+			select(conn->sock + 1, &rfds, &wfds, NULL, NULL);
+
+		} else if (ret == TLS_ERROR_RECV_AGAIN) {
+			FD_ZERO(&rfds);
+			FD_ZERO(&wfds);
+			FD_SET(conn->sock, &wfds);
+			select(conn->sock + 1, &rfds, &wfds, NULL, NULL);
+
+		} else {
+			error_print();
+			return -1;
+		}
+	}
+
+	return 1;
+}
+
+int tlcp_do_accept(TLS_CONNECT *conn)
+{
+	int ret;
+	fd_set rfds;
+	fd_set wfds;
+
+	conn->state = TLS_state_client_hello;
+
+	sm3_init(&conn->sm3_ctx);
+
+	while (1) {
+
+		ret = tlcp_server_handshake(conn);
+
+		if (ret == 1) {
+			break;
+
+		} else if (ret == TLS_ERROR_SEND_AGAIN) {
+			FD_ZERO(&rfds);
+			FD_ZERO(&wfds);
+			FD_SET(conn->sock, &rfds);
+			select(conn->sock + 1, &rfds, &wfds, NULL, NULL);
+
+		} else if (ret == TLS_ERROR_RECV_AGAIN) {
+			FD_ZERO(&rfds);
+			FD_ZERO(&wfds);
+			FD_SET(conn->sock, &wfds);
+			select(conn->sock + 1, &rfds, &wfds, NULL, NULL);
+
+		} else {
+			error_print();
+			return -1;
+		}
+	}
+
+	return 1;
+}
+

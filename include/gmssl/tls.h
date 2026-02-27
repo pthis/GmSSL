@@ -652,6 +652,7 @@ int tls_record_get_handshake_finished(const uint8_t *record,
 int tls_finished_print(FILE *fp, const uint8_t *a, size_t len, int format, int indent);
 
 
+
 // Alert
 typedef struct {
 	uint8_t level;
@@ -739,14 +740,52 @@ void tls_ctx_cleanup(TLS_CTX *ctx);
 #define TLS_ERROR_SYSCALL		-1003	// SSL_ERROR_SYSCALL
 
 
+enum {
+	TLS_state_handshake_init = 0,
+	TLS_state_client_hello,
+	TLS_state_server_hello,
+	TLS_state_server_certificate,
+	TLS_state_server_key_exchange,
+	TLS_state_certificate_request,
+	TLS_state_server_hello_done,
+	TLS_state_client_certificate,
+	TLS_state_client_key_exchange,
+	TLS_state_certificate_verify,
+	TLS_state_generate_keys,
+	TLS_state_client_change_cipher_spec,
+	TLS_state_client_finished,
+	TLS_state_server_change_cipher_spec,
+	TLS_state_server_finished,
+	TLS_state_handshake_over,
+};
 
 typedef struct {
-	int protocol;
 	int is_client;
+
+
+	int protocol;
+
+
+	/*
+	服务器端在初始化之后，会创建一个server_ciphers列表
+	在接收到client_ciphers之后，和自己的server_ciphers对比，选择出conn->cipher
+	也可能没有找到一致的cipher，那么就失败了
+	实际上服务器端的ciphers可以完全来自CTX，并不需要缓存
+
+	客户端在初始化之后，创建client_ciphers，发送给服务器
+	在接收到服务器的cipher后，要判断这个cipher是否在自己的client_ciphers之中
+	但是客户端是需要缓存ciphers的，这样才能够判断返回的cipher是否在自己的ciphers之中
+
+	下面的问题是在CONN中要维护哪些信息？
+	*/
 
 
 	int cipher_suites[TLS_MAX_CIPHER_SUITES_COUNT];
 	size_t cipher_suites_cnt;
+	int cipher_suite;
+
+
+
 	tls_socket_t sock;
 
 	uint8_t enced_record[TLS_MAX_RECORD_SIZE];
@@ -764,7 +803,6 @@ typedef struct {
 	uint8_t *data;
 	size_t datalen;
 
-	int cipher_suite;
 	uint8_t session_id[32];
 	size_t session_id_len;
 	uint8_t server_certs[TLS_MAX_CERTIFICATES_SIZE]; // TODO: use ptr and malloc			
@@ -775,9 +813,11 @@ typedef struct {
 	size_t ca_certs_len;
 
 	X509_KEY sign_key;
-	X509_KEY kenc_key;
+	X509_KEY kenc_key; // 应该作为服务器的SM2加密
+	X509_KEY server_enc_key;
 
 	int verify_result;
+	uint8_t pre_master_secret[48]; // 是否可以重用master_secret作为pre_master_secret呢？			
 	uint8_t master_secret[48];
 	uint8_t key_block[96];
 
@@ -831,6 +871,45 @@ typedef struct {
 
 
 #define TLS_MAX_EXTENSIONS_SIZE 512 // FIXME: no reason to give fixed max length			
+
+
+
+
+int tls_send_client_hello(TLS_CONNECT *conn);
+int tls_recv_client_hello(TLS_CONNECT *conn);
+int tls_send_server_hello(TLS_CONNECT *conn);
+int tls_recv_server_hello(TLS_CONNECT *conn);
+int tls_send_server_certificate(TLS_CONNECT *conn);
+int tls_recv_server_certificate(TLS_CONNECT *conn);
+int tls_send_server_key_exchange(TLS_CONNECT *conn);
+int tls_recv_server_key_exchange(TLS_CONNECT *conn);
+int tls_send_certificate_request(TLS_CONNECT *conn);
+int tls_recv_certificate_request(TLS_CONNECT *conn);
+int tls_send_server_hello_done(TLS_CONNECT *conn);
+int tls_recv_server_hello_done(TLS_CONNECT *conn);
+int tls_send_client_certificate(TLS_CONNECT *conn);
+int tls_recv_client_certificate(TLS_CONNECT *conn);
+int tls_generate_keys(TLS_CONNECT *conn);
+int tls_send_client_key_exchange(TLS_CONNECT *conn);
+int tls_recv_client_key_exchange(TLS_CONNECT *conn);
+int tls_send_certificate_verify(TLS_CONNECT *conn);
+int tls_recv_certificate_verify(TLS_CONNECT *conn);
+int tls_send_change_cipher_spec(TLS_CONNECT *conn);
+int tls_recv_change_cipher_spec(TLS_CONNECT *conn);
+int tls_send_client_finished(TLS_CONNECT *conn);
+int tls_recv_client_finished(TLS_CONNECT *conn);
+int tls_send_server_finished(TLS_CONNECT *conn);
+int tls_recv_server_finished(TLS_CONNECT *conn);
+
+int tlcp_send_client_hello(TLS_CONNECT *conn);
+int tlcp_recv_client_hello(TLS_CONNECT *conn);
+int tlcp_send_server_key_exchange(TLS_CONNECT *conn);
+int tlcp_recv_server_key_exchange(TLS_CONNECT *conn);
+int tlcp_generate_keys(TLS_CONNECT *conn);
+int tlcp_send_client_key_exchange(TLS_CONNECT *conn);
+int tlcp_recv_client_key_exchange(TLS_CONNECT *conn);
+
+void tls_clean_record(TLS_CONNECT *conn);
 
 
 int tls_init(TLS_CONNECT *conn, const TLS_CTX *ctx);
@@ -915,6 +994,17 @@ int tls13_gcm_decrypt(const BLOCK_CIPHER_KEY *key, const uint8_t iv[12],
 #endif
 
 int tls_encrypted_record_print(FILE *fp, const uint8_t *record,  size_t recordlen, int format, int indent);
+
+
+
+
+
+
+
+
+
+
+
 
 #ifdef  __cplusplus
 }

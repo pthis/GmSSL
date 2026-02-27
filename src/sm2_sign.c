@@ -600,9 +600,6 @@ int sm2_sign_finish_fixlen(SM2_SIGN_CTX *ctx, size_t siglen, uint8_t *sig)
 		return -1;
 	}
 	sm3_finish(&ctx->sm3_ctx, dgst);
-	format_bytes(stderr, 0, 4, "signed dgst", dgst, 32);
-
-
 	if (sm2_sign_fixlen(&ctx->key, dgst, siglen, sig) != 1) {
 		error_print();
 		return -1;

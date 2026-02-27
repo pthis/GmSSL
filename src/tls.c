@@ -2096,6 +2096,8 @@ int tls_ctx_init(TLS_CTX *ctx, int protocol, int is_client)
 	return 1;
 }
 
+
+// FIXME: 根据protocol，核对输入的ciphers是否满足protocol的条件
 int tls_ctx_set_cipher_suites(TLS_CTX *ctx, const int *cipher_suites, size_t cipher_suites_cnt)
 {
 	size_t i;
@@ -2314,8 +2316,11 @@ int tls_init(TLS_CONNECT *conn, const TLS_CTX *ctx)
 	size_t i;
 	memset(conn, 0, sizeof(*conn));
 
-	conn->protocol = ctx->protocol;
+
 	conn->is_client = ctx->is_client;
+
+	conn->protocol = ctx->protocol;
+
 	for (i = 0; i < ctx->cipher_suites_cnt; i++) {
 		conn->cipher_suites[i] = ctx->cipher_suites[i];
 	}
@@ -2348,6 +2353,7 @@ int tls_init(TLS_CONNECT *conn, const TLS_CTX *ctx)
 
 
 	conn->verify_depth = ctx->verify_depth;
+
 	return 1;
 }
 

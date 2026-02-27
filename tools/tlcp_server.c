@@ -20,6 +20,40 @@
 
 static const char *options = "[-port num] -cert file -key file [-pass str] -ex_key file [-ex_pass str] [-cacert file]";
 
+
+static const char *help =
+"Options\n"
+"\n"
+"    -port num              Listening port number, default 443\n"
+"    -cert file             Server's certificate chain in PEM format\n"
+"    -key file              Server's encrypted private key in PEM format\n"
+"    -pass str              Password to decrypt private key\n"
+"    -cacert file           CA certificate for client certificate verification\n"
+"\n"
+"Examples\n"
+"\n"
+"    gmssl sm2keygen -pass 1234 -out rootcakey.pem\n"
+"    gmssl certgen -C CN -ST Beijing -L Haidian -O PKU -OU CS -CN ROOTCA -days 3650 -key rootcakey.pem -pass 1234 -out rootcacert.pem -key_usage keyCertSign -key_usage cRLSign -ca\n"
+"    gmssl sm2keygen -pass 1234 -out cakey.pem\n"
+"    gmssl reqgen -C CN -ST Beijing -L Haidian -O PKU -OU CS -CN \"Sub CA\" -key cakey.pem -pass 1234 -out careq.pem\n"
+"    gmssl reqsign -in careq.pem -days 365 -key_usage keyCertSign -ca -path_len_constraint 0 -cacert rootcacert.pem -key rootcakey.pem -pass 1234 -out cacert.pem\n"
+"\n"
+"    gmssl sm2keygen -pass 1234 -out signkey.pem\n"
+"    gmssl reqgen -C CN -ST Beijing -L Haidian -O PKU -OU CS -CN localhost -key signkey.pem -pass 1234 -out signreq.pem\n"
+"    gmssl reqsign -in signreq.pem -days 365 -key_usage digitalSignature -cacert cacert.pem -key cakey.pem -pass 1234 -out signcert.pem\n"
+"\n"
+"    gmssl sm2keygen -pass 1234 -out enckey.pem\n"
+"    gmssl reqgen -C CN -ST Beijing -L Haidian -O PKU -OU CS -CN localhost -key enckey.pem -pass 1234 -out encreq.pem\n"
+"    gmssl reqsign -in encreq.pem -days 365 -key_usage keyEncipherment -cacert cacert.pem -key cakey.pem -pass 1234 -out enccert.pem\n"
+"\n"
+"    cat signcert.pem > double_certs.pem\n"
+"    cat enccert.pem >> double_certs.pem\n"
+"    cat cacert.pem >> double_certs.pem\n"
+"\n"
+"    sudo gmssl tlcp_server -port 443 -cert double_certs.pem -key signkey.pem -pass 1234 -ex_key enckey.pem -ex_pass 1234\n"
+"    gmssl tlcp_client -host 127.0.0.1 -cacert rootcacert.pem\n"
+"\n";
+
 int tlcp_server_main(int argc , char **argv)
 {
 	int ret = 1;
@@ -55,6 +89,7 @@ int tlcp_server_main(int argc , char **argv)
 	while (argc > 0) {
 		if (!strcmp(*argv, "-help")) {
 			printf("usage: %s %s\n", prog, options);
+			printf("%s\n", help);
 			return 0;
 		} else if (!strcmp(*argv, "-port")) {
 			if (--argc < 1) goto bad;
