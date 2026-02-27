@@ -1455,6 +1455,56 @@ int tls_cipher_suite_in_list(int cipher, const int *list, size_t list_count)
 	return 0;
 }
 
+static const int tlcp_ciphers[] = {
+	TLS_cipher_ecc_sm4_cbc_sm3,
+	TLS_cipher_ecc_sm4_gcm_sm3,
+	TLS_cipher_ibc_sm4_cbc_sm3,
+	TLS_cipher_ibc_sm4_gcm_sm3,
+};
+
+static const int tls12_ciphers[] = {
+	TLS_cipher_ecdhe_sm4_cbc_sm3,
+	TLS_cipher_ecdhe_sm4_gcm_sm3,
+	TLS_cipher_ecdhe_ecdsa_with_aes_128_cbc_sha256,
+};
+
+static const int tls13_ciphers[] = {
+	TLS_cipher_sm4_gcm_sm3,
+};
+
+int tls_cipher_suite_support_protocol(int cipher, int protocol)
+{
+	const int *ciphers;
+	size_t ciphers_cnt;
+
+
+	switch (protocol) {
+	case TLS_protocol_tlcp:
+		ciphers = tlcp_ciphers;
+		ciphers_cnt = sizeof(tlcp_ciphers)/sizeof(tlcp_ciphers[0]);
+		break;
+	case TLS_protocol_tls12:
+		ciphers = tls12_ciphers;
+		ciphers_cnt = sizeof(tls12_ciphers)/sizeof(tls12_ciphers[0]);
+		break;
+	case TLS_protocol_tls13:
+		ciphers = tls13_ciphers;
+		ciphers_cnt = sizeof(tls13_ciphers)/sizeof(tls13_ciphers[0]);
+		break;
+	default:
+		error_print();
+		return -1;
+	}
+
+	if (!tls_cipher_suite_in_list(cipher, ciphers, ciphers_cnt)) {
+		error_print();
+		return 0;
+	}
+	return 1;
+}
+
+
+
 /*
 尽可能的发送数据，直到发送完整的报文，或者send 返回错误
 如果send 返回EAGAIN，那么向上层返回WANT_WRITE
@@ -2096,8 +2146,6 @@ int tls_ctx_init(TLS_CTX *ctx, int protocol, int is_client)
 	return 1;
 }
 
-
-// FIXME: 根据protocol，核对输入的ciphers是否满足protocol的条件
 int tls_ctx_set_cipher_suites(TLS_CTX *ctx, const int *cipher_suites, size_t cipher_suites_cnt)
 {
 	size_t i;
@@ -2110,6 +2158,7 @@ int tls_ctx_set_cipher_suites(TLS_CTX *ctx, const int *cipher_suites, size_t cip
 		error_print();
 		return -1;
 	}
+
 	for (i = 0; i < cipher_suites_cnt; i++) {
 		if (!tls_cipher_suite_name(cipher_suites[i])) {
 			error_print();
@@ -2117,6 +2166,10 @@ int tls_ctx_set_cipher_suites(TLS_CTX *ctx, const int *cipher_suites, size_t cip
 		}
 	}
 	for (i = 0; i < cipher_suites_cnt; i++) {
+		if (!tls_cipher_suite_support_protocol(cipher_suites[i], ctx->protocol)) {
+			error_print();
+			return -1;
+		}
 		ctx->cipher_suites[i] = cipher_suites[i];
 	}
 	ctx->cipher_suites_cnt = cipher_suites_cnt;

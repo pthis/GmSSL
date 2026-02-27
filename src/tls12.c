@@ -27,11 +27,6 @@
 #include <errno.h>
 #include <sys/select.h>
 
-static const int tls12_ciphers[] = {
-	TLS_cipher_ecdhe_sm4_cbc_sm3,
-	TLS_cipher_ecdhe_sm4_gcm_sm3,
-	TLS_cipher_ecdhe_ecdsa_with_aes_128_cbc_sha256,
-};
 
 
 // 现在client_certificate_verify做的是不好的
@@ -60,13 +55,18 @@ static const int tls12_ciphers[] = {
 */
 
 // 实际上这个功能本质上是把缓冲区的数据发出去
+static const int tls12_ciphers[] = {
+	TLS_cipher_ecdhe_sm4_cbc_sm3,
+	TLS_cipher_ecdhe_sm4_gcm_sm3,
+	TLS_cipher_ecdhe_ecdsa_with_aes_128_cbc_sha256,
+};
 
 
 int tls12_record_print(FILE *fp, const uint8_t *record,  size_t recordlen, int format, int indent)
 {
 	// 目前只支持TLCP的ECC公钥加密套件，因此不论用哪个套件解析都是一样的
 	// 如果未来支持ECDHE套件，可以将函数改为宏，直接传入 (conn->cipher_suite << 8)
-	format |= tls12_ciphers[0] << 8;
+	format |= tls12_ciphers[0] << 8; // 应该是KeyExchange需要这个参数			
 	return tls_record_print(fp, record, recordlen, format, indent);
 }
 

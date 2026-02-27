@@ -707,6 +707,12 @@ int tls_server_key_exchange_ecdhe_print(FILE *fp, const uint8_t *data, size_t da
 	return 1;
 }
 
+//						
+// 这个函数依赖输入的cipher_suite，才能判断如何解析ServerKeyExchange
+// 显然这个信息无法通过基础的format提供了，并且这个底层的信息一直需要从最上层提供，这就非常不好了
+// 目前来看，cipher_suite是否能够提供足够的信息呢？			
+// ServerKeyExchange, ClientKeyExchange的格式是由cipher_suite决定的
+
 int tls_server_key_exchange_print(FILE *fp, const uint8_t *data, size_t datalen, int format, int indent)
 {
 	int cipher_suite = (format >> 8) & 0xffff;
@@ -1072,8 +1078,6 @@ int tls13_record_print(FILE *fp, int format, int indent, const uint8_t *record, 
 
 // FIXME: 根据RFC来考虑这个函数的参数,从底向上逐步修改每个函数的接口参数
 
-// 仅从record数据是不能判断这个record是TLS 1.2还是TLS 1.3
-// 不同协议上，同名的握手消息，其格式也是不一样的。这真是太恶心了！！！！
 
 // 当消息为ClientKeyExchange,ServerKeyExchange，需要密码套件中的密钥交换算法信息
 // 当消息为加密的Finished，记录类型为Handshake，但是记录负载数据中没有Handshake头
@@ -1081,6 +1085,13 @@ int tls13_record_print(FILE *fp, int format, int indent, const uint8_t *record, 
 //
 // supported_versions 的格式由handshake_type 是否为ClientHello, ServerHello 决定
 // record中是包含这个信息的，但是在exts中没有这个信息
+
+int tls_print_record(FILE *fp, int fmt, int ind, const char *label, TLS_CONNECT *conn)
+{
+	tls_record_print(fp, conn->record, conn->recordlen, fmt, ind);
+	return 1;
+}
+
 int tls_record_print(FILE *fp, const uint8_t *record,  size_t recordlen, int format, int indent)
 {
 	const uint8_t *data;

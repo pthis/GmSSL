@@ -105,7 +105,7 @@ const char *tls_cipher_suite_name(int cipher);
 int tls_cipher_suites_select(const uint8_t *client_ciphers, size_t client_ciphers_len,
 	const int *server_ciphers, size_t server_ciphers_cnt, int *selected_cipher);
 int tls_cipher_suite_in_list(int cipher, const int *list, size_t list_count);
-
+int tls_cipher_suite_support_protocol(int cipher, int protocol);
 
 typedef enum {
 	TLS_compression_null	= 0,
@@ -510,7 +510,7 @@ int tls13_key_share_entry_to_bytes(const SM2_Z256_POINT *point, uint8_t **out, s
 int tls13_client_key_share_ext_to_bytes(const SM2_Z256_POINT *point, uint8_t **out, size_t *outlen);
 int tls13_server_key_share_ext_to_bytes(const SM2_Z256_POINT *point, uint8_t **out, size_t *outlen);
 int tls13_process_client_key_share(const uint8_t *ext_data, size_t ext_datalen,
-	const SM2_KEY *server_ecdhe_key, SM2_Z256_POINT *client_ecdhe_public,
+	const SM2_KEY *server_ecdhe_key, SM2_KEY *client_ecdhe_public,
 	uint8_t **out, size_t *outlen);
 int tls13_process_server_key_share(const uint8_t *ext_data, size_t ext_datalen, SM2_Z256_POINT *point);
 
@@ -762,9 +762,7 @@ enum {
 typedef struct {
 	int is_client;
 
-
 	int protocol;
-
 
 	/*
 	服务器端在初始化之后，会创建一个server_ciphers列表
@@ -776,9 +774,13 @@ typedef struct {
 	在接收到服务器的cipher后，要判断这个cipher是否在自己的client_ciphers之中
 	但是客户端是需要缓存ciphers的，这样才能够判断返回的cipher是否在自己的ciphers之中
 
+
+
+
+
+
 	下面的问题是在CONN中要维护哪些信息？
 	*/
-
 
 	int cipher_suites[TLS_MAX_CIPHER_SUITES_COUNT];
 	size_t cipher_suites_cnt;
@@ -911,6 +913,7 @@ int tlcp_recv_client_key_exchange(TLS_CONNECT *conn);
 
 void tls_clean_record(TLS_CONNECT *conn);
 
+int tls_print_record(FILE *fp, int fmt, int ind, const char *label, TLS_CONNECT *conn);
 
 int tls_init(TLS_CONNECT *conn, const TLS_CTX *ctx);
 int tls_set_socket(TLS_CONNECT *conn, tls_socket_t sock);

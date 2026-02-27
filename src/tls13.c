@@ -640,7 +640,7 @@ int tls13_client_hello_exts_set(uint8_t *exts, size_t *extslen, size_t maxlen,
 }
 
 int tls13_process_client_hello_exts(const uint8_t *exts, size_t extslen,
-	const SM2_KEY *server_ecdhe_key, SM2_Z256_POINT *client_ecdhe_public,
+	const SM2_KEY *server_ecdhe_key, SM2_KEY *client_ecdhe_public,
 	uint8_t *server_exts, size_t *server_exts_len, size_t server_exts_maxlen)
 {
 	size_t len = 0;
@@ -735,7 +735,7 @@ int tls_client_key_shares_from_bytes(SM2_Z256_POINT *sm2_point, const uint8_t **
 }
 
 // FIXME: should be a process function
-int tls13_server_hello_extensions_get(const uint8_t *exts, size_t extslen, SM2_Z256_POINT *sm2_point)
+int tls13_server_hello_extensions_get(const uint8_t *exts, size_t extslen, SM2_KEY *sm2_key)
 {
 	uint16_t version;
 	while (extslen) {
@@ -759,7 +759,8 @@ int tls13_server_hello_extensions_get(const uint8_t *exts, size_t extslen, SM2_Z
 			}
 			break;
 		case TLS_extension_key_share:
-			if (tls13_process_server_key_share(ext_data, ext_datalen, sm2_point) != 1) {
+			memset(sm2_key, 0, sizeof(SM2_KEY));
+			if (tls13_process_server_key_share(ext_data, ext_datalen, &sm2_key->public_key) != 1) {
 				error_print();
 				return -1;
 			}
@@ -1502,7 +1503,7 @@ int tls13_do_connect(TLS_CONNECT *conn)
 	size_t server_verify_data_len;
 
 	SM2_KEY client_ecdhe;
-	SM2_Z256_POINT server_ecdhe_public;
+	SM2_KEY server_ecdhe_public;
 	X509_KEY server_sign_key;
 
 	const DIGEST *digest = DIGEST_sm3();
@@ -1589,7 +1590,7 @@ int tls13_do_connect(TLS_CONNECT *conn)
 		goto end;
 	}
 	conn->cipher_suite = cipher_suite;
-	if (tls13_server_hello_extensions_get(server_exts, server_exts_len, &server_ecdhe_public) != 1) {
+	if (tls13_server_hello_extensions_get(server_exts, server_exts_len, &server_ecdhe_public) != 1) {				
 		error_print();
 		tls_send_alert(conn, TLS_alert_handshake_failure);
 		goto end;
@@ -1609,12 +1610,11 @@ int tls13_do_connect(TLS_CONNECT *conn)
 		uint8_t client_write_iv[12]
 		uint8_t server_write_iv[12]
 	*/
-	sm2_do_ecdh(&client_ecdhe, &server_ecdhe_public, &server_ecdhe_public);		
-	uint8_t share_point[64];							
-	sm2_z256_point_to_bytes(&server_ecdhe_public, share_point);			
+	uint8_t share_point_x[32];
+	sm2_do_ecdh(&client_ecdhe, &server_ecdhe_public, share_point_x);
 	/* [1]  */ tls13_hkdf_extract(digest, zeros, psk, early_secret);
 	/* [5]  */ tls13_derive_secret(early_secret, "derived", &null_dgst_ctx, handshake_secret);
-	/* [6]  */ tls13_hkdf_extract(digest, handshake_secret, share_point, handshake_secret);
+	/* [6]  */ tls13_hkdf_extract(digest, handshake_secret, share_point_x, handshake_secret);
 	/* [7]  */ tls13_derive_secret(handshake_secret, "c hs traffic", &dgst_ctx, client_handshake_traffic_secret);
 	/* [8]  */ tls13_derive_secret(handshake_secret, "s hs traffic", &dgst_ctx, server_handshake_traffic_secret);
 	/* [9]  */ tls13_derive_secret(handshake_secret, "derived", &null_dgst_ctx, master_secret);
@@ -1864,7 +1864,7 @@ int tls13_do_connect(TLS_CONNECT *conn)
 		// send {CertificateVerify*}
 		tls_trace("send {CertificateVerify*}\n");
 		client_sign_algor = TLS_sig_sm2sig_sm3; // FIXME: 应该放在conn里面
-		tls13_sign_certificate_verify(TLS_client_mode, &conn->sign_key, TLS13_SM2_ID, TLS13_SM2_ID_LENGTH, &dgst_ctx, sig, &siglen);
+		tls13_sign_certificate_verify(TLS_client_mode, &conn->sign_key.u.sm2_key, TLS13_SM2_ID, TLS13_SM2_ID_LENGTH, &dgst_ctx, sig, &siglen);
 		if (tls13_record_set_handshake_certificate_verify(record, &recordlen,
 			client_sign_algor, sig, siglen) != 1) {
 			error_print();
@@ -1986,7 +1986,7 @@ int tls13_do_accept(TLS_CONNECT *conn)
 	size_t server_exts_len;
 
 	SM2_KEY server_ecdhe;
-	SM2_Z256_POINT client_ecdhe_public;
+	SM2_KEY client_ecdhe_public;
 	X509_KEY client_sign_key;
 	const BLOCK_CIPHER *cipher = NULL;
 	const DIGEST *digest = NULL;
@@ -2098,13 +2098,12 @@ int tls13_do_accept(TLS_CONNECT *conn)
 	digest_update(&dgst_ctx, record + 5, recordlen - 5);
 
 
-	sm2_do_ecdh(&server_ecdhe, &client_ecdhe_public, &client_ecdhe_public);				
-	uint8_t share_point[64];//FIXME: 应该重新考虑TLS中如何使用sm2_do_ecdh还是sm2_ecdh						
-	sm2_z256_point_to_bytes(&client_ecdhe_public, share_point);			
+	uint8_t share_point_x[32];
+	sm2_do_ecdh(&server_ecdhe, &client_ecdhe_public, share_point_x);
 
 	/* 1  */ tls13_hkdf_extract(digest, zeros, psk, early_secret);
 	/* 5  */ tls13_derive_secret(early_secret, "derived", &null_dgst_ctx, handshake_secret);
-	/* 6  */ tls13_hkdf_extract(digest, handshake_secret, share_point, handshake_secret);
+	/* 6  */ tls13_hkdf_extract(digest, handshake_secret, share_point_x, handshake_secret);
 	/* 7  */ tls13_derive_secret(handshake_secret, "c hs traffic", &dgst_ctx, client_handshake_traffic_secret);
 	/* 8  */ tls13_derive_secret(handshake_secret, "s hs traffic", &dgst_ctx, server_handshake_traffic_secret);
 	/* 9  */ tls13_derive_secret(handshake_secret, "derived", &null_dgst_ctx, master_secret);
@@ -2204,7 +2203,7 @@ int tls13_do_accept(TLS_CONNECT *conn)
 
 	// send Server {CertificateVerify}
 	tls_trace("send {CertificateVerify}\n");
-	tls13_sign_certificate_verify(TLS_server_mode, &conn->sign_key, TLS13_SM2_ID, TLS13_SM2_ID_LENGTH, &dgst_ctx, sig, &siglen);
+	tls13_sign_certificate_verify(TLS_server_mode, &conn->sign_key.u.sm2_key, TLS13_SM2_ID, TLS13_SM2_ID_LENGTH, &dgst_ctx, sig, &siglen);
 	if (tls13_record_set_handshake_certificate_verify(record, &recordlen,
 		TLS_sig_sm2sig_sm3, sig, siglen) != 1) {
 		error_print();
